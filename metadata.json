@@ -1,0 +1,6 @@
+{
+  "name": "BINSMM",
+  "description": "Native Android SMM Panel application with dashboard analytics, service ordering, wallet & transaction tracking, and admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

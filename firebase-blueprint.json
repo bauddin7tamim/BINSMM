@@ -1,0 +1,329 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Trusted administrator grant document keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID of the admin." },
+        "email": { "type": "string", "description": "Verified email of the admin." },
+        "isVerifiedOwnerPin": { "type": "boolean", "description": "Set exclusively by Admin SDK when verified owner pins UID for email updates." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "BINSMM registered user account, wallet balance, and order counters.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID." },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "whatsappHandle": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "accountStatus": { "type": "string", "enum": ["active", "suspended"] },
+        "balance": { "type": "number" },
+        "totalOrders": { "type": "integer" },
+        "pendingOrders": { "type": "integer" },
+        "completedOrders": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["userId", "displayName", "email", "role", "accountStatus", "balance", "totalOrders", "pendingOrders", "completedOrders", "createdAt", "updatedAt"]
+    },
+    "SmmService": {
+      "title": "SmmService",
+      "description": "SMM Panel service item across Instagram, YouTube, Facebook, or Telegram.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["instagram", "youtube", "facebook", "telegram"] },
+        "description": { "type": "string" },
+        "ratePer1000": { "type": "number" },
+        "providerCostPer1000": { "type": "number" },
+        "minQuantity": { "type": "integer" },
+        "maxQuantity": { "type": "integer" },
+        "averageTime": { "type": "string" },
+        "refillSupported": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "providerId": { "type": "string" },
+        "providerServiceId": { "type": "string" },
+        "integrationStatus": { "type": "string", "enum": ["template_unconnected", "provider_linked"] },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["name", "category", "description", "ratePer1000", "providerCostPer1000", "minQuantity", "maxQuantity", "averageTime", "refillSupported", "active", "providerId", "providerServiceId", "integrationStatus", "createdAt", "updatedAt"]
+    },
+    "SmmOrder": {
+      "title": "SmmOrder",
+      "description": "User SMM order record with explicit provider integration state.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "category": { "type": "string", "enum": ["instagram", "youtube", "facebook", "telegram"] },
+        "targetLink": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "charge": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": [
+            "awaiting_provider_config",
+            "pending",
+            "processing",
+            "in_progress",
+            "completed",
+            "partial",
+            "cancelled",
+            "failed",
+            "not_started",
+            "not_received"
+          ]
+        },
+        "providerOrderId": { "type": "string" },
+        "integrationNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["userId", "userEmail", "serviceId", "serviceName", "category", "targetLink", "quantity", "charge", "status", "providerOrderId", "integrationNote", "createdAt", "updatedAt"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Wallet ledger entry and manual deposit verification request.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "type": { "type": "string", "enum": ["deposit_request", "order_charge", "refund", "admin_adjustment"] },
+        "amount": { "type": "number" },
+        "gateway": { "type": "string" },
+        "referenceNote": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending_verification", "completed", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["userId", "userEmail", "type", "amount", "gateway", "referenceNote", "status", "createdAt", "updatedAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "Per-user inbox notification.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["order", "wallet", "system"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["title", "message", "type", "read", "createdAt", "updatedAt"]
+    },
+    "SmmProviderConfig": {
+      "title": "SmmProviderConfig",
+      "description": "Admin-managed SMM v2 API provider endpoint metadata.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "apiKeyMasked": { "type": "string" },
+        "apiKeyConfigured": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "lastBalance": { "type": "string" },
+        "lastSyncStatus": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["name", "baseUrl", "apiKeyMasked", "apiKeyConfigured", "active", "lastBalance", "lastSyncStatus", "createdAt", "updatedAt"]
+    },
+    "AppConfig": {
+      "title": "AppConfig",
+      "description": "Global panel integration status and support contact config.",
+      "type": "object",
+      "properties": {
+        "whatsappSupportNumber": { "type": "string" },
+        "supportEmail": { "type": "string" },
+        "paymentGatewayStatus": { "type": "string" },
+        "providerApiStatus": { "type": "string" },
+        "announcement": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["whatsappSupportNumber", "supportEmail", "paymentGatewayStatus", "providerApiStatus", "announcement", "updatedAt"]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Immutable audit trail of administrative actions performed in the BINSMM Admin Panel.",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string", "description": "Firebase Auth UID of the acting administrator." },
+        "adminEmail": { "type": "string", "description": "Email of the acting administrator." },
+        "action": { "type": "string", "description": "Action identifier (e.g., USER_SUSPENDED, PAYMENT_APPROVED, ORDER_CANCELLED_REFUNDED)." },
+        "targetType": { "type": "string", "enum": ["user", "service", "order", "transaction", "provider", "pricing", "config", "catalog", "knowledge_base", "support_ticket", "admin_security"] },
+        "targetId": { "type": "string", "description": "ID of the affected entity or collection scope." },
+        "summary": { "type": "string", "description": "Human-readable description of the administrative change." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["adminUid", "adminEmail", "action", "targetType", "targetId", "summary", "createdAt"]
+    },
+    "KnowledgeBaseEntry": {
+      "title": "KnowledgeBaseEntry",
+      "description": "Admin-managed BINSMM AI Support Knowledge Base Q&A entry (read-only for customers).",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["account", "order", "wallet", "service", "api_reseller", "general"] },
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "keywords": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "question", "answer", "keywords", "active", "createdAt", "updatedAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer support ticket isolated per user and manageable by Admin.",
+      "type": "object",
+      "properties": {
+        "ticketNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "category": { "type": "string", "enum": ["account", "order", "wallet", "service", "api_reseller", "general"] },
+        "orderId": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in_progress", "waiting_for_admin", "resolved", "closed"] },
+        "lastMessagePreview": { "type": "string" },
+        "lastReplyBy": { "type": "string", "enum": ["customer", "admin", "system"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ticketNumber", "userId", "userEmail", "userName", "category", "orderId", "subject", "description", "status", "lastMessagePreview", "lastReplyBy", "createdAt", "updatedAt"]
+    },
+    "SupportTicketMessage": {
+      "title": "SupportTicketMessage",
+      "description": "Immutable customer or admin reply inside a support ticket.",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["customer", "admin"] },
+        "senderName": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderUid", "senderRole", "senderName", "message", "createdAt"]
+    },
+    "SupportChatMessage": {
+      "title": "SupportChatMessage",
+      "description": "Per-user AI customer support conversation message isolated to users/{userId}/support_chats.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "text": { "type": "string" },
+        "detectedOrderId": { "type": "string" },
+        "suggestWhatsApp": { "type": "boolean" },
+        "escalatedProblem": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role", "text", "detectedOrderId", "suggestWhatsApp", "escalatedProblem", "createdAt"]
+    },
+    "OrderIdempotency": {
+      "title": "OrderIdempotency",
+      "description": "Backend-only idempotency lock preventing duplicate order charges from retries or concurrent submissions.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "userId": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "charge": { "type": "number" },
+        "status": { "type": "string" },
+        "providerId": { "type": "string" },
+        "providerServiceId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "userId", "serviceId", "charge", "status", "createdAt"]
+    },
+    "WebhookEvent": {
+      "title": "WebhookEvent",
+      "description": "Backend-only payment webhook replay protection record.",
+      "type": "object",
+      "properties": {
+        "eventKey": { "type": "string" },
+        "txDocId": { "type": "string" },
+        "userId": { "type": "string" },
+        "gateway": { "type": "string" },
+        "amount": { "type": "number" },
+        "processedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["eventKey", "txDocId", "userId", "gateway", "amount", "processedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Trusted owner-pinned admin UID registry."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile, balance, and order stats isolated per user."
+    },
+    "/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/SmmService" },
+      "description": "SMM service catalog across Instagram, YouTube, Facebook, and Telegram."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/SmmOrder" },
+      "description": "SMM order records created and mutated exclusively via Cloud Functions Admin SDK."
+    },
+    "/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/WalletTransaction" },
+      "description": "Wallet transactions; pending deposit requests may be submitted by active users, approvals/charges/refunds run via Cloud Functions."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/UserNotification" },
+      "description": "User-scoped notifications."
+    },
+    "/users/{userId}/support_chats/{messageId}": {
+      "schema": { "$ref": "#/entities/SupportChatMessage" },
+      "description": "Per-user AI Customer Support chat conversation history isolated per user."
+    },
+    "/knowledge_base/{entryId}": {
+      "schema": { "$ref": "#/entities/KnowledgeBaseEntry" },
+      "description": "BINSMM AI Customer Support Knowledge Base entries; read-only for customers, Admin CRUD."
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "Customer support tickets isolated per user and manageable by Admin."
+    },
+    "/support_tickets/{ticketId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/SupportTicketMessage" },
+      "description": "Immutable conversation replies inside a support ticket."
+    },
+    "/providers/{providerId}": {
+      "schema": { "$ref": "#/entities/SmmProviderConfig" },
+      "description": "Admin-only SMM provider API endpoint configuration (keys stay in Secret Manager)."
+    },
+    "/app_config/{configId}": {
+      "schema": { "$ref": "#/entities/AppConfig" },
+      "description": "Panel-wide WhatsApp support and integration status configuration."
+    },
+    "/admin_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminAuditLog" },
+      "description": "Immutable admin audit log readable and appendable only by verified administrators."
+    },
+    "/order_idempotency/{idemKey}": {
+      "schema": { "$ref": "#/entities/OrderIdempotency" },
+      "description": "Backend-only order idempotency lock collection (client access denied)."
+    },
+    "/webhook_events/{eventKey}": {
+      "schema": { "$ref": "#/entities/WebhookEvent" },
+      "description": "Backend-only payment webhook replay guard collection (client access denied)."
+    }
+  }
+}

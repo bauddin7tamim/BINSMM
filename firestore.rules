@@ -1,0 +1,554 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED PRIMITIVES ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+             request.auth.token.email_verified == true && (
+               request.auth.token.email == 'bauddinsk0@gmail.com' ||
+               (
+                 exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+                 get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('isVerifiedOwnerPin', false) == true
+               )
+             );
+    }
+
+    function isActiveAccount() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+    function isValidUser(data) {
+      return data.userId is string && isValidId(data.userId) &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 200 &&
+             data.role in ['user', 'admin'] &&
+             data.accountStatus in ['active', 'suspended'] &&
+             data.balance is number && data.balance >= 0 && data.balance <= 1000000 &&
+             data.totalOrders is int && data.totalOrders >= 0 &&
+             data.pendingOrders is int && data.pendingOrders >= 0 &&
+             data.completedOrders is int && data.completedOrders >= 0 &&
+             (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 500)) &&
+             (!('whatsappHandle' in data) || data.whatsappHandle == null || (data.whatsappHandle is string && data.whatsappHandle.size() <= 40)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidService(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 160 &&
+             data.category in ['instagram', 'youtube', 'facebook', 'telegram'] &&
+             data.description is string && data.description.size() <= 600 &&
+             data.ratePer1000 is number && data.ratePer1000 >= 0 && data.ratePer1000 <= 100000 &&
+             data.providerCostPer1000 is number && data.providerCostPer1000 >= 0 && data.providerCostPer1000 <= 100000 &&
+             data.minQuantity is int && data.minQuantity >= 1 && data.minQuantity <= 10000000 &&
+             data.maxQuantity is int && data.maxQuantity >= data.minQuantity && data.maxQuantity <= 50000000 &&
+             data.averageTime is string && data.averageTime.size() <= 80 &&
+             data.refillSupported is bool &&
+             data.active is bool &&
+             data.providerId is string && data.providerId.size() <= 128 &&
+             data.providerServiceId is string && data.providerServiceId.size() <= 128 &&
+             data.integrationStatus in ['template_unconnected', 'provider_linked'] &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidOrder(data) {
+      return data.userId is string && isValidId(data.userId) &&
+             data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 200 &&
+             data.serviceId is string && isValidId(data.serviceId) &&
+             data.serviceName is string && data.serviceName.size() >= 1 && data.serviceName.size() <= 160 &&
+             data.category in ['instagram', 'youtube', 'facebook', 'telegram'] &&
+             data.targetLink is string && data.targetLink.size() >= 5 && data.targetLink.size() <= 500 &&
+             data.quantity is int && data.quantity >= 1 && data.quantity <= 50000000 &&
+             data.charge is number && data.charge >= 0 && data.charge <= 1000000 &&
+             data.status in [
+               'awaiting_provider_config', 'pending', 'processing', 'in_progress',
+               'completed', 'partial', 'cancelled', 'failed', 'not_started', 'not_received'
+             ] &&
+             data.providerOrderId is string && data.providerOrderId.size() <= 128 &&
+             data.integrationNote is string && data.integrationNote.size() <= 300 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidTransaction(data) {
+      return data.userId is string && isValidId(data.userId) &&
+             data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 200 &&
+             data.type in ['deposit_request', 'order_charge', 'refund', 'admin_adjustment'] &&
+             data.amount is number && data.amount > 0 && data.amount <= 1000000 &&
+             data.gateway is string && data.gateway.size() >= 1 && data.gateway.size() <= 80 &&
+             data.referenceNote is string && data.referenceNote.size() <= 300 &&
+             data.status in ['pending_verification', 'completed', 'rejected'] &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidNotification(data) {
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 500 &&
+             data.type in ['order', 'wallet', 'system'] &&
+             data.read is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProvider(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.baseUrl is string && data.baseUrl.size() <= 300 &&
+             data.apiKeyMasked is string && data.apiKeyMasked.size() <= 128 &&
+             data.apiKeyConfigured is bool &&
+             data.active is bool &&
+             data.lastBalance is string && data.lastBalance.size() <= 64 &&
+             data.lastSyncStatus is string && data.lastSyncStatus.size() <= 200 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAppConfig(data) {
+      return data.whatsappSupportNumber is string && data.whatsappSupportNumber.size() <= 32 &&
+             data.supportEmail is string && data.supportEmail.size() <= 200 &&
+             data.paymentGatewayStatus is string && data.paymentGatewayStatus.size() <= 120 &&
+             data.providerApiStatus is string && data.providerApiStatus.size() <= 120 &&
+             data.announcement is string && data.announcement.size() <= 500 &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAdminAuditLog(data) {
+      return data.adminUid is string && isValidId(data.adminUid) &&
+             data.adminEmail is string && data.adminEmail.size() >= 3 && data.adminEmail.size() <= 200 &&
+             data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+             data.targetType in [
+               'user', 'service', 'order', 'transaction', 'provider',
+               'pricing', 'config', 'catalog', 'knowledge_base', 'support_ticket', 'admin_security'
+             ] &&
+             data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+             data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidKnowledgeBaseEntry(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 160 &&
+             data.category in ['account', 'order', 'wallet', 'service', 'api_reseller', 'general'] &&
+             data.question is string && data.question.size() >= 3 && data.question.size() <= 400 &&
+             data.answer is string && data.answer.size() >= 3 && data.answer.size() <= 2500 &&
+             data.keywords is string && data.keywords.size() <= 400 &&
+             data.active is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSupportTicket(data) {
+      return data.ticketNumber is string && data.ticketNumber.size() >= 3 && data.ticketNumber.size() <= 40 &&
+             data.userId is string && isValidId(data.userId) &&
+             data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 200 &&
+             data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100 &&
+             data.category in ['account', 'order', 'wallet', 'service', 'api_reseller', 'general'] &&
+             data.orderId is string && data.orderId.size() <= 128 &&
+             data.subject is string && data.subject.size() >= 3 && data.subject.size() <= 160 &&
+             data.description is string && data.description.size() >= 5 && data.description.size() <= 2000 &&
+             data.status in ['open', 'in_progress', 'waiting_for_admin', 'resolved', 'closed'] &&
+             data.lastMessagePreview is string && data.lastMessagePreview.size() <= 300 &&
+             data.lastReplyBy in ['customer', 'admin', 'system'] &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidTicketMessage(data) {
+      return data.senderUid is string && isValidId(data.senderUid) &&
+             data.senderRole in ['customer', 'admin'] &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 2000 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidSupportChatMessage(data) {
+      return data.role in ['user', 'assistant'] &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 4000 &&
+             data.detectedOrderId is string && data.detectedOrderId.size() <= 128 &&
+             data.suggestWhatsApp is bool &&
+             data.escalatedProblem is string && data.escalatedProblem.size() <= 400 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    // --- COLLECTION RULES ---
+
+    match /admins/{adminUid} {
+      allow get: if isAdmin() && isValidId(adminUid);
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'role', 'accountStatus', 'balance', 'totalOrders', 'pendingOrders', 'completedOrders', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'photoUrl', 'whatsappHandle', 'role', 'accountStatus', 'balance', 'totalOrders', 'pendingOrders', 'completedOrders', 'createdAt', 'updatedAt']) &&
+                       incoming().role == 'user' &&
+                       incoming().accountStatus == 'active' &&
+                       incoming().balance == 0 &&
+                       incoming().totalOrders == 0 &&
+                       incoming().pendingOrders == 0 &&
+                       incoming().completedOrders == 0 &&
+                       isValidUser(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isActiveAccount() &&
+                       isValidUser(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().email == existing().email &&
+                       incoming().role == existing().role &&
+                       incoming().accountStatus == existing().accountStatus &&
+                       incoming().balance == existing().balance &&
+                       incoming().totalOrders == existing().totalOrders &&
+                       incoming().pendingOrders == existing().pendingOrders &&
+                       incoming().completedOrders == existing().completedOrders &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'photoUrl', 'whatsappHandle', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(userId);
+
+      match /notifications/{notificationId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(notificationId) && (request.auth.uid == userId || isAdmin());
+        allow list: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(notificationId) &&
+                         (request.auth.uid == userId || isAdmin()) &&
+                         incoming().keys().hasAll(['title', 'message', 'type', 'read', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['title', 'message', 'type', 'read', 'createdAt', 'updatedAt']) &&
+                         isValidNotification(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(notificationId) &&
+                         isValidNotification(incoming()) &&
+                         incoming().createdAt == existing().createdAt && (
+                           isAdmin() ||
+                           (
+                             request.auth.uid == userId &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(notificationId) && (request.auth.uid == userId || isAdmin());
+      }
+
+      // Per-user AI Support conversation history strictly isolated to that user
+      match /support_chats/{messageId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(messageId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(messageId) &&
+                         request.auth.uid == userId &&
+                         incoming().keys().hasAll([
+                           'role', 'text', 'detectedOrderId', 'suggestWhatsApp', 'escalatedProblem', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'role', 'text', 'detectedOrderId', 'suggestWhatsApp', 'escalatedProblem', 'createdAt'
+                         ]) &&
+                         isValidSupportChatMessage(incoming());
+
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(messageId) && request.auth.uid == userId;
+      }
+    }
+
+    match /services/{serviceId} {
+      allow get: if isSignedIn() && isValidId(serviceId);
+      allow list: if isSignedIn();
+
+      allow create: if isAdmin() &&
+                       isValidId(serviceId) &&
+                       incoming().keys().hasAll([
+                         'name', 'category', 'description', 'ratePer1000', 'providerCostPer1000',
+                         'minQuantity', 'maxQuantity', 'averageTime', 'refillSupported', 'active',
+                         'providerId', 'providerServiceId', 'integrationStatus', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'name', 'category', 'description', 'ratePer1000', 'providerCostPer1000',
+                         'minQuantity', 'maxQuantity', 'averageTime', 'refillSupported', 'active',
+                         'providerId', 'providerServiceId', 'integrationStatus', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidService(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(serviceId) &&
+                       isValidService(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'category', 'description', 'ratePer1000', 'providerCostPer1000',
+                         'minQuantity', 'maxQuantity', 'averageTime', 'refillSupported', 'active',
+                         'providerId', 'providerServiceId', 'integrationStatus', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(serviceId);
+    }
+
+    // Orders are created, cancelled, refunded, and updated exclusively via atomic Cloud Functions
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && isValidId(orderId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create, update, delete: if false;
+    }
+
+    // Clients may only submit pending_verification manual deposit requests; all approvals, charges, refunds & webhooks run via Cloud Functions
+    match /transactions/{txId} {
+      allow get: if isSignedIn() && isValidId(txId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(txId) &&
+                       isActiveAccount() &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'userEmail', 'type', 'amount', 'gateway',
+                         'referenceNote', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'userEmail', 'type', 'amount', 'gateway',
+                         'referenceNote', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidTransaction(incoming()) &&
+                       incoming().type == 'deposit_request' &&
+                       incoming().status == 'pending_verification';
+
+      allow update, delete: if false;
+    }
+
+    // Server-side idempotency & webhook replay protection collections (Cloud Functions Admin SDK only)
+    match /order_idempotency/{idemKey} {
+      allow read, write: if false;
+    }
+
+    match /webhook_events/{eventKey} {
+      allow read, write: if false;
+    }
+
+    match /providers/{providerId} {
+      allow get: if isAdmin() && isValidId(providerId);
+      allow list: if isAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidId(providerId) &&
+                       incoming().keys().hasAll([
+                         'name', 'baseUrl', 'apiKeyMasked', 'apiKeyConfigured',
+                         'active', 'lastBalance', 'lastSyncStatus', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'name', 'baseUrl', 'apiKeyMasked', 'apiKeyConfigured',
+                         'active', 'lastBalance', 'lastSyncStatus', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidProvider(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(providerId) &&
+                       isValidProvider(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'baseUrl', 'apiKeyMasked', 'apiKeyConfigured',
+                         'active', 'lastBalance', 'lastSyncStatus', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(providerId);
+    }
+
+    match /app_config/{configId} {
+      allow get: if isSignedIn() && isValidId(configId);
+      allow list: if isAdmin();
+
+      allow create, update: if isAdmin() &&
+                               isValidId(configId) &&
+                               incoming().keys().hasAll([
+                                 'whatsappSupportNumber', 'supportEmail',
+                                 'paymentGatewayStatus', 'providerApiStatus',
+                                 'announcement', 'updatedAt'
+                               ]) &&
+                               incoming().keys().hasOnly([
+                                 'whatsappSupportNumber', 'supportEmail',
+                                 'paymentGatewayStatus', 'providerApiStatus',
+                                 'announcement', 'updatedAt'
+                               ]) &&
+                               isValidAppConfig(incoming());
+
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    match /admin_audit_logs/{logId} {
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidId(logId) &&
+                       incoming().keys().hasAll([
+                         'adminUid', 'adminEmail', 'action', 'targetType',
+                         'targetId', 'summary', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'adminUid', 'adminEmail', 'action', 'targetType',
+                         'targetId', 'summary', 'createdAt'
+                       ]) &&
+                       incoming().adminUid == request.auth.uid &&
+                       isValidAdminAuditLog(incoming());
+
+      allow update, delete: if false;
+    }
+
+    // AI Support Knowledge Base: read-only to signed-in customers, managed strictly by verified Admin
+    match /knowledge_base/{entryId} {
+      allow get: if isSignedIn() && isValidId(entryId);
+      allow list: if isSignedIn();
+
+      allow create: if isAdmin() &&
+                       isValidId(entryId) &&
+                       incoming().keys().hasAll([
+                         'title', 'category', 'question', 'answer', 'keywords', 'active', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'title', 'category', 'question', 'answer', 'keywords', 'active', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidKnowledgeBaseEntry(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(entryId) &&
+                       isValidKnowledgeBaseEntry(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'title', 'category', 'question', 'answer', 'keywords', 'active', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(entryId);
+    }
+
+    // Support Tickets: strictly isolated to ticket owner or verified Admin
+    match /support_tickets/{ticketId} {
+      function ticketExists() {
+        return exists(/databases/$(database)/documents/support_tickets/$(ticketId));
+      }
+
+      function ticketOwnerId() {
+        return ticketExists()
+          ? get(/databases/$(database)/documents/support_tickets/$(ticketId)).data.userId
+          : '';
+      }
+
+      function ticketExistsAfter() {
+        return existsAfter(/databases/$(database)/documents/support_tickets/$(ticketId));
+      }
+
+      function ticketDataAfter() {
+        return getAfter(/databases/$(database)/documents/support_tickets/$(ticketId)).data;
+      }
+
+      allow get: if isSignedIn() && isValidId(ticketId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(ticketId) &&
+                       isActiveAccount() &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'open' &&
+                       incoming().lastReplyBy in ['customer', 'system'] &&
+                       incoming().keys().hasAll([
+                         'ticketNumber', 'userId', 'userEmail', 'userName', 'category',
+                         'orderId', 'subject', 'description', 'status', 'lastMessagePreview',
+                         'lastReplyBy', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'ticketNumber', 'userId', 'userEmail', 'userName', 'category',
+                         'orderId', 'subject', 'description', 'status', 'lastMessagePreview',
+                         'lastReplyBy', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidSupportTicket(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(ticketId) &&
+                       isValidSupportTicket(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().ticketNumber == existing().ticketNumber &&
+                       incoming().createdAt == existing().createdAt && (
+                         isAdmin() ||
+                         (
+                           existing().userId == request.auth.uid &&
+                           isActiveAccount() &&
+                           existing().status != 'closed' &&
+                           incoming().status in ['open', 'waiting_for_admin'] &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'lastMessagePreview', 'lastReplyBy', 'status', 'updatedAt'
+                           ])
+                         )
+                       );
+
+      allow delete: if isAdmin() && isValidId(ticketId);
+
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(ticketId) && isValidId(messageId) &&
+                      (ticketOwnerId() == request.auth.uid || isAdmin());
+        allow list: if isSignedIn() && isValidId(ticketId) &&
+                       (ticketOwnerId() == request.auth.uid || isAdmin());
+
+        allow create: if isSignedIn() &&
+                         isValidId(ticketId) &&
+                         isValidId(messageId) &&
+                         ticketExistsAfter() &&
+                         incoming().senderUid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'senderUid', 'senderRole', 'senderName', 'message', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'senderUid', 'senderRole', 'senderName', 'message', 'createdAt'
+                         ]) &&
+                         isValidTicketMessage(incoming()) && (
+                           (isAdmin() && incoming().senderRole == 'admin') ||
+                           (
+                             ticketDataAfter().userId == request.auth.uid &&
+                             isActiveAccount() &&
+                             ticketDataAfter().status != 'closed' &&
+                             incoming().senderRole == 'customer'
+                           )
+                         );
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}

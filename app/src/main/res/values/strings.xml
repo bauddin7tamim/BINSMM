@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">BINSMM</string>
+    <string name="tagline">Precision Social Media Growth Panel</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_new_order">New Order</string>
+    <string name="nav_orders">Orders</string>
+    <string name="nav_profile">Profile</string>
+    <string name="sign_in_google">Continue with Google</string>
+    <string name="sign_out">Sign Out</string>
+    <string name="add_funds">Add Funds</string>
+    <string name="whatsapp_support">WhatsApp Support</string>
+    <string name="ai_support_title">AI Customer Support</string>
+    <string name="admin_panel">Admin Dashboard</string>
+</resources>
