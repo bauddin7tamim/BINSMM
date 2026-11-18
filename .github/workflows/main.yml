@@ -28,35 +28,12 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
       - name: Install Android SDK Packages
-        shell: bash
         run: |
-          set -e
-
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-
-          if [ -z "$SDK_ROOT" ]; then
-            echo "Android SDK path not found"
-            exit 1
-          fi
-
-          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" \
-            -type f -name sdkmanager | head -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "SDK Manager not found"
-            exit 1
-          fi
-
-          yes | "$SDKMANAGER" \
-            --sdk_root="$SDK_ROOT" --licenses
-
-          "$SDKMANAGER" \
-            --sdk_root="$SDK_ROOT" \
-            --install \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build Debug APK
         run: gradle --no-daemon assembleDebug
